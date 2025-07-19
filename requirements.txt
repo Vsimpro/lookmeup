@@ -1,0 +1,4 @@
+pybase62==1.0.0
+dnserver==0.4.0
+python-dotenv==1.1.1
+Requests==2.32.4

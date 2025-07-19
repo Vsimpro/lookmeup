@@ -1,0 +1,14 @@
+[[zones]]
+host   = "{{%DOMAIN%}}"
+type   = "A"
+answer = "{{%IP_ADDRESS%}}"
+
+[[zones]]
+host   = "beacon.{{%DOMAIN%}}"
+type   = "A"
+answer = "{{%IP_ADDRESS%}}"
+
+[[zones]]
+host   = "exfil.{{%DOMAIN%}}"
+type   = "A"
+answer = "{{%IP_ADDRESS%}}"
