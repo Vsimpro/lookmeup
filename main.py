@@ -2,11 +2,14 @@ from dotenv import load_dotenv; load_dotenv()
 import io, os, logging, dnserver
 from dnserver.main import logger
 
+import modules.queries as queries
 from modules import domainparsing
+from modules import database as db
+
 
 
 # Global Variables
-PORT   = 53
+PORT   = 5311
 ZONES  = "zones.toml"
 
 DOMAIN = os.getenv("DOMAIN")
@@ -52,7 +55,7 @@ def initialize():
     if not os.path.exists(".env"):
         raise Exception( ".env file is missing!" )
     
-    no_slack_webhook   = (SLACK_WEBHOOK == ""   or SLACK_WEBHOOK == None)
+    no_slack_webhook   = (SLACK_WEBHOOK   == "" or SLACK_WEBHOOK   == None)
     no_discord_webhook = (DISCORD_WEBHOOK == "" or DISCORD_WEBHOOK == None)
     
     if no_slack_webhook and no_discord_webhook:
@@ -76,6 +79,12 @@ def initialize():
 
 def main():
     global ZONES
+    
+    db.initialize_db( {
+        "file_table"      : queries.create_file_table, 
+        "filechunk_table" : queries.create_filechunk_table,
+        "sentlog_table"   : queries.create_sentlog_table
+    } )
     
     # Prepare log handling
     capture = io.StringIO()

@@ -102,8 +102,8 @@ def send(
     #   Send webrequests to webhooks
     #
 
-    slack_success   = False
-    discord_success = False
+    slack_success   = None
+    discord_success = None
     
     if slack_message:
         slack_success   = slack_message.send( webhook_urls )
@@ -113,7 +113,8 @@ def send(
 
     
     # Check for fails
-    if not slack_success or not discord_success:
+    if (not slack_success   and slack_success   != None) or \
+       (not discord_success and discord_success != None):
         return False
     
     return True

