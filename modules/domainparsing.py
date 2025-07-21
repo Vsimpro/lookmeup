@@ -155,3 +155,40 @@ def handle_beacon( domain : str ):
         )
     
     return
+
+def handle_plaintext( domain : str ):
+    """
+    Parse & Handle the plaintext messages received from the Domain Lookup.
+    Will send the parsed message to Discord and/or Slack, depending on which webhooks are given.
+    """
+    
+    global COOLDOWN
+    
+    #  Domain format for Plaintext:
+    #      DATA_PART.plaintxt.example.tld
+    #  
+    #      DATA_PART (plaintext):
+    #          Should include the transferable message as is.
+    
+    # Split into subdomains. Remove Domain & TLD
+    subdomains = domain.split(".")[0:-2]
+
+    # TODO: Unify this & Beacon!
+    message  = subdomains[ 0 ]
+    
+    first_appearance = True
+    if message in COOLDOWN:
+        first_appearance = False
+    
+    if message not in COOLDOWN:
+        COOLDOWN[ message ] = datetime.now()
+    
+    if (datetime.now() - COOLDOWN[ message ] >= timedelta(minutes=5)) or first_appearance:
+        COOLDOWN[ message ] = datetime.now()
+        Postoffice.send(
+            WEBHOOKS,
+            Postoffice.Slack_message( message ),
+            Postoffice.Discord_message( message )
+        )
+    
+    return
