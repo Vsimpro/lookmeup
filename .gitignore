@@ -1,3 +1,5 @@
 *pycache*
 .env
 ./*toml
+zones.toml
+*db

@@ -45,9 +45,12 @@ def handle_exfil( domain : str ):
     # Split into subdomains. Remove Domain & TLD
     subdomains = domain.split(".")[0:-2]
     
-    data_part = subdomains[ 0 ]
-    id_part   = subdomains[ 1 ]
-    sha_part  = subdomains[ 2 ]
+    try:    
+        data_part = subdomains[ 0 ]
+        id_part   = subdomains[ 1 ]
+        sha_part  = subdomains[ 2 ]
+    except IndexError:
+        return
     
     if str(id_part) == "0":
         data = deserialize_from_header(data_part)

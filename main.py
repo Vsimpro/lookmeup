@@ -43,13 +43,13 @@ def listen_and_parse( capturer : io.StringIO ):
         except Exception as e:
             print( "Ran into an error. Details: ", last_line, "and exception:", e  )
         
-        if f"exfil.{ DOMAIN }".lower()  in query_domain.lower():
+        if f".exfil.{ DOMAIN }".lower()  in query_domain.lower():
             domainparsing.handle_exfil( query_domain )
         
-        if f"beacon.{ DOMAIN }".lower() in query_domain.lower():
+        if f".beacon.{ DOMAIN }".lower() in query_domain.lower():
             domainparsing.handle_beacon( query_domain )
 
-        if f"plaintxt.{ DOMAIN }".lower() in query_domain.lower():
+        if f".plaintxt.{ DOMAIN }".lower() in query_domain.lower():
             domainparsing.handle_plaintext( query_domain )
 
         previous_log = log
