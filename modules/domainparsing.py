@@ -139,24 +139,16 @@ def handle_beacon( domain : str ):
     # Split into subdomains. Remove Domain & TLD
     subdomains = domain.split(".")[0:-2]
     
-    data_part = subdomains[ 0 ]
-    message   = str(base62.decodebytes( data_part ).decode())
-    
-    first_appearance = True
-    if message in COOLDOWN:
-        first_appearance = False
-    
-    if message not in COOLDOWN:
-        COOLDOWN[ message ] = datetime.now()
-    
-    if (datetime.now() - COOLDOWN[ message ] >= timedelta(minutes=5)) or first_appearance:
-        COOLDOWN[ message ] = datetime.now()
-        Postoffice.send(
-            WEBHOOKS,
-            Postoffice.Slack_message( message ),
-            Postoffice.Discord_message( message )
-        )
-    
+    try:
+        data_part = subdomains[ 0 ]
+        message   = str(base62.decodebytes( data_part ).decode())
+    except IndexError:
+        return
+
+    except UnicodeError:
+        return
+
+    send_message( message )
     return
 
 def handle_plaintext( domain : str ):
@@ -165,8 +157,6 @@ def handle_plaintext( domain : str ):
     Will send the parsed message to Discord and/or Slack, depending on which webhooks are given.
     """
     
-    global COOLDOWN
-    
     #  Domain format for Plaintext:
     #      DATA_PART.plaintxt.example.tld
     #  
@@ -174,10 +164,18 @@ def handle_plaintext( domain : str ):
     #          Should include the transferable message as is.
     
     # Split into subdomains. Remove Domain & TLD
-    subdomains = domain.split(".")[0:-2]
+    try:
+        subdomains = domain.split(".")[0:-2]
+        message  = subdomains[ 0 ]
+    except IndexError:
+        return
+    
+    send_message( message )
+    return
 
-    # TODO: Unify this & Beacon!
-    message  = subdomains[ 0 ]
+
+def send_message( message : str ):
+    global COOLDOWN
     
     first_appearance = True
     if message in COOLDOWN:
@@ -194,4 +192,3 @@ def handle_plaintext( domain : str ):
             Postoffice.Discord_message( message )
         )
     
-    return
