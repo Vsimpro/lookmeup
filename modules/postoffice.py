@@ -69,7 +69,6 @@ class Slack_message:
                 headers = { "Content-Type" : "application/json" }
             )
             
-            print(self.response)
             return self.handle_response()
 
 

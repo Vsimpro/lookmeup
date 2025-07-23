@@ -17,7 +17,21 @@ DOMAIN = os.getenv("DOMAIN")
 SLACK_WEBHOOK   = os.getenv("SLACK_WEBHOOK")
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
 
-def listen_and_parse( capturer : io.StringIO ):
+# TODO: Move to config.toml system
+PREFIXES = {
+    "exfil" : {
+        "webhooks" : [DISCORD_WEBHOOK, SLACK_WEBHOOK],
+        "type"    : "exfil",
+        "decode_function" : None
+    },
+    "beacon" : {
+        "webhooks" : [DISCORD_WEBHOOK, SLACK_WEBHOOK],
+        "type"    : "beacon",
+        "decode_function" : None
+    }
+}
+
+def listen_and_parse( capturer : io.StringIO, decode_function ):
     global DOMAIN 
     
     log          = ""
@@ -42,15 +56,24 @@ def listen_and_parse( capturer : io.StringIO ):
             query_domain = [ word for word in last_line.split(" ") if DOMAIN.lower() in word.lower() ][0].split(".[A]")[0]
         except Exception as e:
             print( "Ran into an error. Details: ", last_line, "and exception:", e  )
+            return
         
-        if f".exfil.{ DOMAIN }".lower()  in query_domain.lower():
-            domainparsing.handle_exfil( query_domain )
+        for PREFIX in PREFIXES:
+            if f".{PREFIX}.{ DOMAIN }".lower() not in query_domain.lower():
+                continue
+            
+            message_function = None
+            
+            # Choose which message type to use
+            if PREFIXES[ PREFIX ]["type"] == "exfil":
+                message_function = domainparsing.handle_exfil
         
-        if f".beacon.{ DOMAIN }".lower() in query_domain.lower():
-            domainparsing.handle_beacon( query_domain )
-
-        if f".plaintxt.{ DOMAIN }".lower() in query_domain.lower():
-            domainparsing.handle_plaintext( query_domain )
+            if PREFIXES[ PREFIX ]["type"] == "beacon":
+                message_function = domainparsing.handle_beacon
+                
+            if message_function != None:
+                message_function( query_domain,  PREFIXES[ PREFIX ]["decode_function"], PREFIXES[ PREFIX ]["webhooks"] )
+            
 
         previous_log = log
         
@@ -100,7 +123,7 @@ def main():
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     
-    logger.addHandler(logging.NullHandler())     
+    logger.addHandler( logging.NullHandler() )     
     logger.addHandler( channel )
     
     # Prepare DNS server
@@ -110,9 +133,13 @@ def main():
     assert server.is_running
     
     # Parse the logs
-    listen_and_parse( capture )
-
+    from plugins.b62 import decode
     
+    PREFIXES["exfil"]["decode_function"] = decode
+    PREFIXES["beacon"]["decode_function"] = decode
+    
+    listen_and_parse( capture, decode )
+
 if __name__ == "__main__":
     initialize()
     main()
