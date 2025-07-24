@@ -1,5 +1,5 @@
 from dotenv import load_dotenv; load_dotenv()
-import io, os, logging, dnserver
+import io, os, toml, logging, dnserver, importlib
 from dnserver.main import logger
 
 import modules.queries as queries
@@ -14,25 +14,11 @@ ZONES  = "zones.toml"
 
 DOMAIN = os.getenv("DOMAIN")
 
-SLACK_WEBHOOK   = os.getenv("SLACK_WEBHOOK")
-DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+PREFIXES = None
 
-# TODO: Move to config.toml system
-PREFIXES = {
-    "exfil" : {
-        "webhooks" : [DISCORD_WEBHOOK, SLACK_WEBHOOK],
-        "type"    : "exfil",
-        "decode_function" : None
-    },
-    "beacon" : {
-        "webhooks" : [DISCORD_WEBHOOK, SLACK_WEBHOOK],
-        "type"    : "beacon",
-        "decode_function" : None
-    }
-}
-
-def listen_and_parse( capturer : io.StringIO, decode_function ):
+def listen_and_parse( capturer : io.StringIO ):
     global DOMAIN 
+    global PREFIXES
     
     log          = ""
     previous_log = ""
@@ -74,24 +60,15 @@ def listen_and_parse( capturer : io.StringIO, decode_function ):
             if message_function != None:
                 message_function( query_domain,  PREFIXES[ PREFIX ]["decode_function"], PREFIXES[ PREFIX ]["webhooks"] )
             
-
         previous_log = log
         
 
 def initialize():
     global DOMAIN
+    global PREFIXES
     
     if not os.path.exists(".env"):
         raise Exception( ".env file is missing!" )
-    
-    no_slack_webhook   = (SLACK_WEBHOOK   == "" or SLACK_WEBHOOK   == None)
-    no_discord_webhook = (DISCORD_WEBHOOK == "" or DISCORD_WEBHOOK == None)
-    
-    if no_slack_webhook and no_discord_webhook:
-        raise Exception( "Both discord and slack webhook in .env are empty. Please provide either or both." )
-    
-    if DOMAIN == None or DOMAIN == "":
-        raise ValueError( "DOMAIN in .env can not be 'None' or empty!" )
     
     if not os.path.exists("zones.toml"):  
         zones_template = ""
@@ -104,8 +81,31 @@ def initialize():
 
         with open("./zones.toml", "w+") as file:
             file.write(zones_template)
+            
+    if not os.path.exists("config.toml"):  
+        config_template = ""
+        with open("./statics/config_template.toml", "r") as file:
+            
+            config_template = file.read()
+            
+            config_template = zones_template.replace("{{%DOMAIN%}}", DOMAIN)
+            config_template = zones_template.replace("{{%IP_ADDRESS%}}", "1.2.3.4")
 
+        with open("./config.toml", "w+") as file:
+            file.write(config_template)
+            
+        exit()
 
+    PREFIXES = toml.load("./config.toml")
+    
+    if PREFIXES == None:
+        raise ValueError( "Was config.toml left empty?" ) 
+    
+    # Load plugins
+    for prefix in PREFIXES:
+        PREFIXES[prefix]["decode_function"]  = importlib.import_module( PREFIXES[prefix]["decode_lib"] ).decode
+    
+    
 def main():
     global ZONES
     
@@ -133,12 +133,7 @@ def main():
     assert server.is_running
     
     # Parse the logs
-    from plugins.b62 import decode
-    
-    PREFIXES["exfil"]["decode_function"] = decode
-    PREFIXES["beacon"]["decode_function"] = decode
-    
-    listen_and_parse( capture, decode )
+    listen_and_parse( capture )
 
 if __name__ == "__main__":
     initialize()

@@ -1,0 +1,11 @@
+[PREFIXES.exfil]
+webhooks = []
+type = "exfil"
+decode_lib = "plugins.b62"
+decode_function = ""
+
+[PREFIXES.beacon]
+webhooks = []
+type = "beacon"
+decode_lib = "plugins.b62"
+decode_function = ""

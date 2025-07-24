@@ -3,3 +3,4 @@
 ./*toml
 zones.toml
 *db
+config.toml
