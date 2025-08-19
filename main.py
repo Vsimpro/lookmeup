@@ -49,7 +49,7 @@ def listen_and_parse( capturer : io.StringIO ):
                 continue
             
             message_function = None
-            
+
             # Choose which message type to use
             if PREFIXES[ PREFIX ]["type"] == "exfil":
                 message_function = domainparsing.handle_exfil

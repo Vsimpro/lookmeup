@@ -95,7 +95,7 @@ def handle_exfil( domain : str, decode_function, webhooks : list ):
         file_sent_previously = db.query_database( queries.get_sent_status )
         if file_sent_previously != []:
             return
-        
+
         # Send the reconstructed file
         file_sent = Postoffice.send(
             webhooks,
@@ -138,7 +138,7 @@ def handle_beacon( domain : str, decode_function, webhooks ):
     
     try:
         data_part = subdomains[ 0 ]
-        message   = decode_function( data_part ).decode()
+        message   = decode_function( data_part )
     except IndexError:
         return
 
