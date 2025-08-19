@@ -9,7 +9,9 @@ def decode( message : str ) -> bytes:
 
 
 def encode( message : str ) -> str:
-    bytes   = message.encode()
-    numbers = int.from_bytes(bytes, "big")
+    _bytes = message
+    if type(message) != bytes:
+        _bytes   = message.encode()
     
+    numbers = int.from_bytes(_bytes, "big")
     return base62.encode( numbers )

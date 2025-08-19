@@ -86,7 +86,6 @@ def handle_exfil( domain : str, decode_function, webhooks : list ):
         # If they're, reconstruct the file
         chunks     = db.query_database( queries.get_filechunks, (sha_part,) )
         all_chunks = "".join([(chunk[0], chunk[1])[1] for chunk in chunks])
-        
             
         file_data = decode_function( all_chunks ) 
         file_name = db.query_database( queries.get_name_with_sha, (sha_part,) )[0][0]
@@ -154,9 +153,8 @@ def handle_beacon( domain : str, decode_function, webhooks ):
 
 def deserialize_from_header( chunk : str, decode_function  ):
     decoded = decode_function(chunk)
-    data = json.loads(decoded)
+    data    = json.loads(decoded)
     return data
-
 
 def send_message( message : str, webhooks ):
     global COOLDOWN
@@ -175,4 +173,3 @@ def send_message( message : str, webhooks ):
             Postoffice.Slack_message( message ),
             Postoffice.Discord_message( message )
         )
-    
